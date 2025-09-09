@@ -1,6 +1,17 @@
+use std::io::{self, IsTerminal};
 use std::{env, process};
 
 fn main() {
+    let mut value = String::new();
+
+    // get value from stdin
+    let stdin = io::stdin();
+    if !stdin.is_terminal() {
+        stdin.read_line(&mut value)
+            .unwrap_or_default();
+        value = value.trim().to_string();
+    }
+
     // get args
     let mut args = env::args();
 
@@ -21,8 +32,10 @@ fn main() {
     }
 
     // rest as value
-    let value: String = args.collect::<Vec<String>>().join(" ");
+    if value.is_empty() {
+        value = args.collect::<Vec<String>>().join(" ");
+    }
 
-    // print
-    println!("{}: {:?}", command, value);
+    // print value
+    print!("{}", value);
 }
