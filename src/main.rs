@@ -2,6 +2,7 @@ use std::io::{self, IsTerminal};
 use std::{env, process};
 
 fn main() {
+    let mut piped = false;
     let mut value = String::new();
 
     // get value from stdin
@@ -10,6 +11,7 @@ fn main() {
         stdin.read_line(&mut value)
             .unwrap_or_default();
         value = value.trim().to_string();
+        piped = true;
     }
 
     // get args
@@ -18,24 +20,48 @@ fn main() {
     // skip name
     args.next();
 
-    // second arg as command (set, get)
-    let command: String = match args.next() {
+    // check command from second arg
+    let second: String = match args.next() {
         Some(arg) => arg,
         None => {
-            eprintln!("command missing!");
-            process::exit(1);
+            if !piped {
+                eprintln!("value missing!");
+                process::exit(1);
+            }
+            String::from("")
         }
     };
-    if !["set", "get"].contains(&command.as_str()) {
-        eprintln!("invalid command!");
-        process::exit(1);
+    let command = match second.as_str() {
+        "-s" | "--set" => "set",
+        "-g" | "--get" => "get",
+        s => {
+            if s.starts_with("-") {
+                eprintln!("unknown command!");
+                process::exit(1);
+            }
+
+            // add second arg to value if not command
+            if !piped {
+                value += s.trim();
+            }
+            "get"
+        }
+    };
+
+    // add rest to value
+    if !piped {
+        let rest = args.collect::<Vec<String>>()
+            .join(" ")
+            .trim()
+            .to_string();
+
+        if value.is_empty() {
+            value = rest;
+        } else if !rest.is_empty() {
+            value = value + " " + rest.as_str();
+        }
     }
 
-    // rest as value
-    if value.is_empty() {
-        value = args.collect::<Vec<String>>().join(" ");
-    }
-
-    // print value
-    print!("{}", value);
+    // print command: value
+    print!("{}: {:?}", command, value);
 }
