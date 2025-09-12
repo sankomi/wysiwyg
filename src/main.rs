@@ -3,9 +3,13 @@ use std::io::{self, IsTerminal, Write};
 use std::path::PathBuf;
 use std::{env, process};
 
+enum Command {
+    SET,
+    GET,
+}
+
 fn main() {
-    let mut piped = false;
-    let mut value = String::new();
+    let mut name: Option<String> = None;
 
     // get data path and test write
     let data_path = match get_data_path() {
@@ -20,12 +24,12 @@ fn main() {
         process::exit(1);
     }
 
-    // get value from stdin
+    // get name from stdin
     let stdin = io::stdin();
     if !stdin.is_terminal() {
-        stdin.read_line(&mut value).unwrap_or_default();
-        value = value.trim().to_string();
-        piped = true;
+        let mut read = String::new();
+        stdin.read_line(&mut read).unwrap_or_default();
+        name = Some(read.trim().to_string());
     }
 
     // get args
@@ -38,43 +42,69 @@ fn main() {
     let second: String = match args.next() {
         Some(arg) => arg,
         None => {
-            if !piped {
-                eprintln!("value missing!");
+            if name.is_none() {
+                eprintln!("name missing!");
                 process::exit(1);
+            } else {
+                String::from("get")
             }
-            String::from("")
         }
     };
     let command = match second.as_str() {
-        "-s" | "--set" => "set",
-        "-g" | "--get" => "get",
+        "-s" | "--set" => Command::SET,
+        "-g" | "--get" => Command::GET,
         s => {
             if s.starts_with("-") {
                 eprintln!("unknown command!");
                 process::exit(1);
             }
 
-            // add second arg to value if not command
-            if !piped {
-                value += s.trim();
+            // use arg as name if not command
+            if name.is_none() {
+                name = Some(s.trim().to_string());
             }
-            "get"
+            Command::GET
         }
     };
 
-    // add rest to value
-    if !piped {
-        let rest = args.collect::<Vec<String>>().join(" ").trim().to_string();
-
-        if value.is_empty() {
-            value = rest;
-        } else if !rest.is_empty() {
-            value = value + " " + rest.as_str();
-        }
+    // use third arg as name if not set
+    if name.is_none() {
+        name = args.next();
     }
 
-    // print command: value
-    print!("{}: {:?}", command, value);
+    // unwrap name or die
+    let name = match name {
+        Some(n) => n,
+        None => {
+            eprintln!("name missing!");
+            process::exit(1);
+        }
+    };
+
+    // die if name is empty
+    if name.is_empty() {
+        eprintln!("name missing!");
+        process::exit(1);
+    }
+
+    // run command
+    match command {
+        Command::SET => {
+            // use rest of args as value
+            let value = args.collect::<Vec<String>>().join(" ").trim().to_string();
+
+            // die if nothing to set
+            if value.is_empty() {
+                eprintln!("value missing!");
+                process::exit(1);
+            }
+
+            print!("set {}: {:?}", name, value);
+        }
+        Command::GET => {
+            print!("get {}", name);
+        }
+    }
 }
 
 fn get_data_path() -> Result<PathBuf, &'static str> {
