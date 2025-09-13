@@ -1,5 +1,5 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, IsTerminal, Write};
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, BufRead, BufReader, IsTerminal, Write};
 use std::path::PathBuf;
 use std::{env, process};
 
@@ -103,6 +103,13 @@ fn main() {
         }
         Command::GET => {
             print!("get {}", name);
+            let value = get_value(name);
+            if let Err(_) = value  {
+                eprintln!("value missing!");
+                process::exit(1);
+            }
+            let value = value.unwrap();
+            print!("{}", value);
         }
     }
 }
@@ -125,6 +132,23 @@ fn get_data_path() -> Result<PathBuf, &'static str> {
     }
 
     Ok(PathBuf::from(home).join(".local/share/wysiwyg"))
+}
+
+fn get_value(name: String) -> Result<String, &'static str> {
+    // open file
+    let data_path = get_data_path()?;
+    let file_path = data_path.join("test.txt");
+    let file = File::open(file_path).map_err(|_| "failed to open file")?;
+
+    // loop through lines
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        let string = line.map_err(|_| "failed to read file")?;
+        println!("{}", string);
+    }
+
+    // test
+    Ok(String::from("value"))
 }
 
 fn save_text(path: &PathBuf) -> Result<(), &'static str> {
