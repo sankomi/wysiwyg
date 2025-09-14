@@ -11,19 +11,6 @@ enum Command {
 fn main() {
     let mut name: Option<String> = None;
 
-    // get data path and test write
-    let data_path = match get_data_path() {
-        Ok(path) => path,
-        Err(e) => {
-            eprintln!("{}", e);
-            process::exit(1);
-        }
-    };
-    if let Err(e) = save_text(&data_path) {
-        eprintln!("{}", e);
-        process::exit(1);
-    }
-
     // get name from stdin
     let stdin = io::stdin();
     if !stdin.is_terminal() {
@@ -102,10 +89,9 @@ fn main() {
             print!("set {}: {:?}", name, value);
         }
         Command::GET => {
-            print!("get {}", name);
             let value = get_value(name);
-            if let Err(_) = value  {
-                eprintln!("value missing!");
+            if let Err(e) = value  {
+                eprintln!("{}", e);
                 process::exit(1);
             }
             let value = value.unwrap();
@@ -138,17 +124,22 @@ fn get_value(name: String) -> Result<String, &'static str> {
     // open file
     let data_path = get_data_path()?;
     let file_path = data_path.join("test.txt");
-    let file = File::open(file_path).map_err(|_| "failed to open file")?;
+    let file = File::open(file_path).map_err(|_| "failed to open file!")?;
 
     // loop through lines
     let reader = BufReader::new(file);
     for line in reader.lines() {
-        let string = line.map_err(|_| "failed to read file")?;
-        println!("{}", string);
+        let string = line.map_err(|_| "failed to read file!")?;
+        let (key, value) = match string.split_once(" ") {
+            Some((key, value)) => (key, value),
+            None => continue,
+        };
+        if key == name {
+            return Ok(value.to_string());
+        }
     }
 
-    // test
-    Ok(String::from("value"))
+    Err("value missing!")
 }
 
 fn save_text(path: &PathBuf) -> Result<(), &'static str> {
