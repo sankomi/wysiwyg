@@ -1,4 +1,4 @@
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, BufRead, BufReader, IsTerminal, Write};
 use std::path::PathBuf;
 use std::{env, process};
@@ -86,11 +86,16 @@ fn main() {
                 process::exit(1);
             }
 
-            print!("set {}: {:?}", name, value);
+            let saved = set_value(name, value);
+            if let Err(e) = saved {
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+            print!("");
         }
         Command::GET => {
             let value = get_value(name);
-            if let Err(e) = value  {
+            if let Err(e) = value {
                 eprintln!("{}", e);
                 process::exit(1);
             }
@@ -117,14 +122,25 @@ fn get_data_path() -> Result<PathBuf, &'static str> {
         return Err("$HOME missing!");
     }
 
-    Ok(PathBuf::from(home).join(".local/share/wysiwyg"))
+    // create dir
+    let path = PathBuf::from(home).join(".local/share/wysiwyg");
+    if fs::create_dir_all(&path).is_err() {
+        return Err("failed to create data path!");
+    }
+
+    Ok(path)
 }
 
 fn get_value(name: String) -> Result<String, &'static str> {
     // open file
     let data_path = get_data_path()?;
-    let file_path = data_path.join("test.txt");
-    let file = File::open(file_path).map_err(|_| "failed to open file!")?;
+    let file_path = data_path.join("data");
+    let file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(file_path)
+        .map_err(|_| "failed to open file!")?;
 
     // loop through lines
     let reader = BufReader::new(file);
@@ -142,27 +158,53 @@ fn get_value(name: String) -> Result<String, &'static str> {
     Err("value missing!")
 }
 
-fn save_text(path: &PathBuf) -> Result<(), &'static str> {
-    // create dir
-    if let Err(_) = fs::create_dir_all(path) {
-        return Err("failed to create data path!");
-    }
-
+fn set_value(name: String, value: String) -> Result<(), &'static str> {
     // open file
-    let file_path = path.join("test.txt");
+    let data_path = get_data_path()?;
+    let file_path = data_path.join("data");
     let file = OpenOptions::new()
         .create(true)
-        .append(true)
-        .open(&file_path);
-    if let Err(_) = file {
-        return Err("failed to open data file!");
-    }
-    let mut file = file.unwrap();
+        .read(true)
+        .write(true)
+        .open(&file_path)
+        .map_err(|_| "failed to open file!")?;
 
-    // write things
-    if let Err(_) = writeln!(file, "test!") {
-        return Err("failed to write data file!");
+    // get all lines except matching one(s)
+    let mut lines: Vec<String> = Vec::new();
+    let reader = BufReader::new(file);
+    for line in reader.lines() {
+        // skip unreadable lines
+        if line.is_err() {
+            continue;
+        }
+
+        // split line and skip unsplittable lines
+        let string = line.unwrap();
+        let key = match string.split_once(" ") {
+            Some((key, _)) => key,
+            None => continue,
+        };
+
+        // add to lines if name does not match
+        if key != name {
+            lines.push(string);
+        }
     }
+
+    // add name value pair
+    lines.push(name + " " + &value);
+
+    // write data file and replace
+    let temp_path = data_path.join("temp_data");
+    let mut file = OpenOptions::new()
+        .create(true)
+        .write(true)
+        .truncate(true)
+        .open(&temp_path)
+        .map_err(|_| "failed to write data file!")?;
+    file.write_all(lines.join("\n").as_bytes())
+        .map_err(|_| "failed to write data file!")?;
+    fs::rename(temp_path, file_path).map_err(|_| "failed to update data file!")?;
 
     Ok(())
 }
