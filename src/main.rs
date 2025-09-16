@@ -30,8 +30,7 @@ fn main() {
         Some(arg) => arg,
         None => {
             if name.is_none() {
-                eprintln!("name missing!");
-                process::exit(1);
+                die("name missing!")
             } else {
                 String::from("get")
             }
@@ -42,8 +41,7 @@ fn main() {
         "-g" | "--get" => Command::GET,
         s => {
             if s.starts_with("-") {
-                eprintln!("unknown command!");
-                process::exit(1);
+                die("unknown command!");
             }
 
             // use arg as name if not command
@@ -62,16 +60,12 @@ fn main() {
     // unwrap name or die
     let name = match name {
         Some(n) => n,
-        None => {
-            eprintln!("name missing!");
-            process::exit(1);
-        }
+        None => die("name missing!"),
     };
 
     // die if name is empty
     if name.is_empty() {
-        eprintln!("name missing!");
-        process::exit(1);
+        die("name missing!");
     }
 
     // run command
@@ -82,27 +76,45 @@ fn main() {
 
             // die if nothing to set
             if value.is_empty() {
-                eprintln!("value missing!");
-                process::exit(1);
+                die("value missing!");
             }
 
-            let saved = set_value(name, value);
+            let saved = set_value(name, &value);
             if let Err(e) = saved {
-                eprintln!("{}", e);
-                process::exit(1);
+                die(e);
             }
-            print!("");
+            end(&value);
         }
         Command::GET => {
             let value = get_value(name);
             if let Err(e) = value {
-                eprintln!("{}", e);
-                process::exit(1);
+                die(e);
             }
             let value = value.unwrap();
-            print!("{}", value);
+            end(&value);
         }
     }
+}
+
+fn die(message: &str) -> String {
+    let exit_code = env::var_os("WYSIWYG_EXIT_CODE").is_some();
+    let error_message = env::var_os("WYSIWYG_ERROR_MESSAGE").is_some();
+
+    if error_message {
+        eprintln!("{}", message);
+    } else {
+        eprintln!("?");
+    }
+
+    if exit_code {
+        process::exit(1);
+    } else {
+        process::exit(0);
+    }
+}
+
+fn end(value: &str) {
+    println!("{}", value);
 }
 
 fn get_data_path() -> Result<PathBuf, &'static str> {
@@ -158,7 +170,7 @@ fn get_value(name: String) -> Result<String, &'static str> {
     Err("value missing!")
 }
 
-fn set_value(name: String, value: String) -> Result<(), &'static str> {
+fn set_value(name: String, value: &str) -> Result<(), &'static str> {
     // open file
     let data_path = get_data_path()?;
     let file_path = data_path.join("data");
