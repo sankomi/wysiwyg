@@ -12,11 +12,30 @@ fn main() {
     let mut name: Option<String> = None;
 
     // get name from stdin
+    let mut names: Option<Vec<String>> = None;
     let stdin = io::stdin();
-    if !stdin.is_terminal() {
-        let mut read = String::new();
-        stdin.read_line(&mut read).unwrap_or_default();
-        name = Some(read.trim().to_string());
+    let terminal = stdin.is_terminal();
+    if !terminal {
+        let mut strings = vec![];
+
+        for line in stdin.lock().lines() {
+            if let Ok(string) = line {
+                // die if name is empty or not alpha numeric
+                if string.is_empty() {
+                    die("name missing!");
+                } else if !string.chars().all(char::is_alphanumeric) {
+                    die("name invalid!");
+                }
+
+                strings.push(string);
+            }
+        }
+
+        if strings.len() > 0 {
+            names = Some(strings);
+        } else {
+            die("name missing!");
+        }
     }
 
     // get args
@@ -29,7 +48,7 @@ fn main() {
     let second: String = match args.next() {
         Some(arg) => arg,
         None => {
-            if name.is_none() {
+            if terminal {
                 die("name missing!")
             } else {
                 String::from("get")
@@ -44,33 +63,44 @@ fn main() {
                 die("unknown command!");
             }
 
-            // use arg as name if not command
-            if name.is_none() {
+            // use arg as name if terminal
+            if terminal {
                 name = Some(s.trim().to_string());
             }
             Command::GET
         }
     };
 
-    // use third arg as name if not set
-    if name.is_none() {
-        name = args.next();
-    }
-
-    // unwrap name or die
-    let name = match name {
-        Some(n) => n,
-        None => die("name missing!"),
-    };
-
-    // die if name is empty
-    if name.is_empty() {
-        die("name missing!");
+    if terminal {
+        // use third arg as name if not set
+        if name.is_none() {
+            name = args.next();
+        }
     }
 
     // run command
     match command {
         Command::SET => {
+            // get single name or die
+            name = if terminal {
+                name
+            } else {
+                let names = names.unwrap();
+                if names.len() != 1 {
+                    die("multiple names!");
+                }
+
+                names.first().cloned()
+            };
+
+            // unwrap name or die
+            let name = match name {
+                Some(n) => n,
+                None => die("name missing!"),
+            };
+
+            check_name(&name);
+
             // use rest of args as value
             let value = args.collect::<Vec<String>>().join(" ").trim().to_string();
 
@@ -86,12 +116,28 @@ fn main() {
             end(&value);
         }
         Command::GET => {
-            let value = get_value(name);
-            if let Err(e) = value {
-                die(e);
+            // get all names
+            names = if terminal {
+                vec![name.unwrap()].into()
+            } else {
+                names
+            };
+            let names = names.unwrap();
+
+            let mut values: Vec<String> = vec![];
+            for name in names {
+                check_name(&name);
+
+                match get_value(name) {
+                    Ok(value) => values.push(value),
+                    Err(e) => {
+                        die(e);
+                    }
+                }
             }
-            let value = value.unwrap();
-            end(&value);
+            for value in values {
+                end(&value);
+            }
         }
     }
 }
@@ -112,7 +158,6 @@ fn die(message: &str) -> String {
         process::exit(0);
     }
 }
-
 fn end(value: &str) {
     println!("{}", value);
 }
@@ -219,4 +264,13 @@ fn set_value(name: String, value: &str) -> Result<(), &'static str> {
     fs::rename(temp_path, file_path).map_err(|_| "failed to update data file!")?;
 
     Ok(())
+}
+
+fn check_name(name: &str) {
+    // die if name is empty or not alpha numeric
+    if name.is_empty() {
+        die("name missing!");
+    } else if !name.chars().all(char::is_alphanumeric) {
+        die("name invalid!");
+    }
 }
