@@ -109,7 +109,10 @@ fn main() {
                 die("value missing!");
             }
 
-            let saved = set_value(name, &value);
+            // join lines with \x01
+            let joined_value = value.replace("\n", "\x01");
+
+            let saved = set_value(name, &joined_value);
             if let Err(e) = saved {
                 die(e);
             }
@@ -129,7 +132,11 @@ fn main() {
                 check_name(&name);
 
                 match get_value(name) {
-                    Ok(value) => values.push(value),
+                    Ok(value) => {
+                        // split lines on \x01
+                        let split_value = value.replace("\x01", "\n");
+                        values.push(split_value)
+                    }
                     Err(e) => {
                         die(e);
                     }
